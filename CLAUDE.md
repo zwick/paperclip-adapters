@@ -22,7 +22,7 @@ For the project overview, install instructions, and full release flow, read [`RE
 
 ## Releases
 
-Versioning + npm publish are automated via [changesets](https://github.com/changesets/changesets) and a [trusted-publisher](https://docs.npmjs.com/trusted-publishers) OIDC flow on push to `main`. Full process in [`README.md` §Release process](./README.md#release-process). Never run `npm publish` manually; never commit a long-lived `NPM_TOKEN`.
+**This fork does not publish to npm** (see `docs/RELEASING.md`); the Release workflow only opens version PRs. Upstream's versioning + publish flow used [changesets](https://github.com/changesets/changesets) and a [trusted-publisher](https://docs.npmjs.com/trusted-publishers) OIDC flow on push to `main`. Full process in [`README.md` §Release process](./README.md#release-process). Never run `npm publish` manually; never commit a long-lived `NPM_TOKEN`.
 
 ## Authoring gaps in upstream paperclip
 

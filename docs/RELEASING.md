@@ -1,5 +1,7 @@
 # Releasing
 
+> **Fork notice (zwick/paperclip-adapters): npm publishing is disabled.** `release.yml` only opens the version PR. It has no publish step and no `id-token` permission. The sections below describe the upstream `@superbiche` flow and are kept for reference. Do not follow them in this fork. Install adapters from a checkout with `isLocalPath` instead.
+
 Versioning + npm publishes are automated via [changesets](https://github.com/changesets/changesets) and a [trusted-publisher](https://docs.npmjs.com/trusted-publishers) OIDC flow on push to `main`. The release pipeline lives in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 
 ## Routine release flow
