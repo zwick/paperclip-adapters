@@ -95,8 +95,9 @@ export function parseCopilotJsonl(stdout: string) {
 export function describeCopilotFailure(
   parsed: Record<string, unknown> | null,
   stderr: string,
+  processExitCode: number | null = null,
 ): string | null {
-  const exitCode = parsed ? asNumber(parsed.exitCode, -1) : -1;
+  const exitCode = parsed ? asNumber(parsed.exitCode, processExitCode ?? -1) : (processExitCode ?? -1);
   if (exitCode === 0) return null;
 
   // Prefer the first meaningful line from stderr — that's where Copilot puts its errors.

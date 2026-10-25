@@ -61,6 +61,7 @@ export function createServerAdapter(): ServerAdapterModule {
     listSkills: listCopilotLocalSkills,
     syncSkills: syncCopilotLocalSkills,
     supportsLocalAgentJwt: true,
+    runtimeToolDelivery: "native_mcp",
     supportsInstructionsBundle: true,
     agentConfigurationDoc,
   };

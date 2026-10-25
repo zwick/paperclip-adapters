@@ -1,6 +1,9 @@
 export const type = "copilot_local";
 export const label = "GitHub Copilot CLI (local)";
 
+/** Copilot CLI release this adapter's flags and output shapes were verified against. */
+export const PINNED_COPILOT_CLI_VERSION = "1.0.103";
+
 /**
  * Static fallback list returned when dynamic model discovery fails (no token,
  * offline, API unreachable). The factory wires `listModels` to call the live
@@ -26,13 +29,13 @@ Adapter: copilot_local
 Registration: external plugin (loaded via adapter plugin system).
 
 Use when:
-- The host machine has GitHub Copilot CLI installed (\`npm i -g @githubnext/github-copilot-cli\`) and a pre-authenticated session (\`copilot login\` or \`gh auth login\`).
+- The host machine has GitHub Copilot CLI installed (\`npm i -g @github/copilot@${PINNED_COPILOT_CLI_VERSION}\`; auto-update is disabled by the adapter) and a pre-authenticated session (\`copilot login\` or \`gh auth login\`).
 - You want a local coding agent backed by GitHub Copilot's subscription billing.
 - You want session continuation across heartbeats via Copilot's native \`--resume=<sessionId>\`.
 
 Don't use when:
 - Copilot CLI is not installed or no GitHub auth state exists for the host process.
-- You need per-run cost reporting in dollars (Copilot is subscription-billed; \`costUsd\` is always \`null\`).
+- You need exact dollar billing: \`costUsd\` is derived from Copilot's reported AI credits (1 credit = $0.01) and is informational for subscription auth.
 
 Core fields:
 - command (string, optional): defaults to \`copilot\`
@@ -42,7 +45,8 @@ Core fields:
 - promptTemplate (string, optional): heartbeat prompt template
 - dangerouslySkipPermissions (boolean, optional): pass \`--allow-all\` instead of \`--allow-all-tools\`
 - extraArgs (string[], optional): additional CLI args
-- env (object, optional): KEY=VALUE environment variables (legacy / overrides — \`copilotToken\` is preferred over inline \`GH_TOKEN\`)
+- env (object, optional): KEY=VALUE environment variables. \`PAPERCLIP_*\` keys are ignored: the adapter owns identity, wake, workspace and \`PAPERCLIP_API_KEY\`.
+- instructionsFilePath (string, optional): agent instructions file prepended to the prompt each run.
 - timeoutSec (number, optional): adapter-level timeout in seconds (0 = no timeout)
 - graceSec (number, optional): SIGTERM grace period before SIGKILL (default 20)
 

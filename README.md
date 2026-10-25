@@ -6,10 +6,12 @@ Each adapter ships as its own npm package under `@superbiche/*`. They plug into 
 
 ## Packages
 
+> This is the `zwick/paperclip-adapters` fork. npm publishing is disabled here: `.github/workflows/release.yml` only opens version PRs. `packages/copilot-local` is renamed to `@zwicker-software/copilot-paperclip-adapter` and is installed from a checkout with `isLocalPath` (see its README). The `@superbiche/*` names below belong to the upstream maintainer.
+
 | Package | Wraps | Version |
 |---|---|---|
 | [`@superbiche/cline-paperclip-adapter`](./packages/cline-local) | [Cline CLI 2.x](https://github.com/cline/cline) | [![npm](https://img.shields.io/npm/v/@superbiche/cline-paperclip-adapter.svg)](https://www.npmjs.com/package/@superbiche/cline-paperclip-adapter) |
-| [`@superbiche/copilot-paperclip-adapter`](./packages/copilot-local) | [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) | [![npm](https://img.shields.io/npm/v/@superbiche/copilot-paperclip-adapter.svg)](https://www.npmjs.com/package/@superbiche/copilot-paperclip-adapter) |
+| [`@zwicker-software/copilot-paperclip-adapter`](./packages/copilot-local) | [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) | 0.3.0 (Zwicker Software fork of `@superbiche/copilot-paperclip-adapter` 0.2.1; not published to npm) |
 | [`@superbiche/qwen-paperclip-adapter`](./packages/qwen-local) | [Qwen Code CLI](https://github.com/QwenLM/qwen-code) | [![npm](https://img.shields.io/npm/v/@superbiche/qwen-paperclip-adapter.svg)](https://www.npmjs.com/package/@superbiche/qwen-paperclip-adapter) |
 
 Every adapter declares `sessionManagement` with `supportsSessionResume: true`. Their CLI-native session handles (`cline -T <taskId>`, `copilot --resume=<sessionId>`, `qwen -r <sessionId>`) round-trip through Paperclip's `agent_task_sessions` table and resume across heartbeats.
@@ -48,17 +50,17 @@ Gaps in Paperclip's plugin system that affect adapter authors — branches on [`
 
 ## Release process
 
-Versioning and publishing are automated via [changesets](https://github.com/changesets/changesets) + GitHub Actions + npm [trusted publishers](https://docs.npmjs.com/trusted-publishers) (OIDC, no long-lived tokens).
+Versioning uses [changesets](https://github.com/changesets/changesets). **This fork does not publish to npm.** The Release workflow (`.github/workflows/release.yml`) opens a "chore(release): version packages" PR when changesets are pending, and stops there. It has no `publish` step, no `id-token` permission, and no npm token.
 
 To ship a change:
 
 1. Make your code change on a branch.
-2. Run `pnpm exec changeset` and answer the prompts — select the affected packages, pick the bump level (`patch` / `minor` / `major`), write a short human-readable summary. This generates `.changeset/<slug>.md`.
+2. Run `pnpm exec changeset` and answer the prompts. This generates `.changeset/<slug>.md`.
 3. Commit the changeset file alongside your code change. Open a PR, review, merge to `main`.
-4. The Release workflow (`.github/workflows/release.yml`) opens a **"chore(release): version packages"** PR that rolls up all pending changesets into version bumps + CHANGELOG entries.
-5. Merge that release PR → the workflow re-runs, detects no pending changesets, publishes to npm with provenance attestation.
+4. The Release workflow opens or updates the version PR (version bumps and CHANGELOG entries). Merge it to record the version.
+5. To deploy, build from a checkout and install with `isLocalPath` (see `packages/copilot-local/README.md`). Installing into Paperclip needs board approval.
 
-No manual `npm publish`, no `NPM_TOKEN` in the repo. Provenance attestations are visible on the npm package page under **Provenance**.
+Upstream's npm trusted-publisher flow was removed on purpose. Do not run `npm publish` and do not add an `NPM_TOKEN`.
 
 ## License
 
