@@ -1,4 +1,20 @@
-# @superbiche/copilot-paperclip-adapter
+# @zwicker-software/copilot-paperclip-adapter
+
+## 0.3.0
+
+Zwicker Software fork of `@superbiche/copilot-paperclip-adapter` 0.2.1 (baseline commit `4fc467f`).
+
+- `execute` rewritten on the `gemini_local` pattern: wake prompt sections, full `PAPERCLIP_*` env, `PAPERCLIP_API_KEY` from `ctx.authToken` (not overridable via `config.env`), `instructionsFilePath`.
+- Runtime MCP / connections tools and managed MCP gateways via `--additional-mcp-config @file` (0600 temp file); `runtimeToolDelivery: "native_mcp"`.
+- Cooperative cancel via `onCancellationReady` + `ctx.signal`, acknowledged result.
+- Usage and cost from `--usage-output-file` (tokens, cache reads, AI credits, premium requests).
+- Pins: `COPILOT_AUTO_UPDATE=false`, `--no-auto-update`, CLI version check in `testEnvironment`, adapter-utils exact pin 2026.1005.0.
+- `skills.ts` ported to `buildRuntimeMountedSkillSnapshot`; skills are mounted from a per-run temp dir (no more `<cwd>/.paperclip/copilot-skill-cache`).
+- `--effort` replaced by the documented `--reasoning-effort`; adds `--no-ask-user`.
+- Failure message uses the real process exit code when the CLI emits no result event.
+- Package renamed to `@zwicker-software/copilot-paperclip-adapter`; MIT notice and attribution in `NOTICE.md`.
+
+## Upstream history (@superbiche/copilot-paperclip-adapter)
 
 ## 0.2.1
 

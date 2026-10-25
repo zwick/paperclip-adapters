@@ -19,6 +19,7 @@ import { resolveCopilotToken, validateCopilotToken } from "./auth.js";
 import { isValidGheHost } from "./models.js";
 import { detectCopilotLocalModel } from "./detect-model.js";
 import { applyCopilotProviderEnv } from "./provider.js";
+import { PINNED_COPILOT_CLI_VERSION } from "../index.js";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
@@ -85,6 +86,39 @@ export async function testEnvironment(
       level: "info",
       message: `Command is executable: ${command}`,
     });
+    try {
+      const probe = await runChildProcess(`copilot-version-${Date.now()}`, command, ["--version"], {
+        cwd,
+        env: { ...env, COPILOT_AUTO_UPDATE: "false" },
+        timeoutSec: 20,
+        graceSec: 2,
+        onLog: async () => {},
+      });
+      const found = /(\d+\.\d+\.\d+)/.exec(probe.stdout)?.[1] ?? null;
+      if (!found) {
+        checks.push({
+          code: "copilot_version_unknown",
+          level: "warn",
+          message: "Could not determine the Copilot CLI version.",
+          detail: summarizeProbeDetail(probe.stdout, probe.stderr),
+        });
+      } else if (found === PINNED_COPILOT_CLI_VERSION) {
+        checks.push({
+          code: "copilot_version_pinned",
+          level: "info",
+          message: `Copilot CLI ${found} matches the version this adapter was verified against.`,
+        });
+      } else {
+        checks.push({
+          code: "copilot_version_unverified",
+          level: "warn",
+          message: `Copilot CLI ${found} differs from the verified version ${PINNED_COPILOT_CLI_VERSION}.`,
+          hint: "The adapter relies on --additional-mcp-config, --usage-output-file, --reasoning-effort and COPILOT_SKILLS_DIRS. Re-run the smoke checks before upgrading.",
+        });
+      }
+    } catch {
+      /* version probe is advisory */
+    }
   } catch (err) {
     checks.push({
       code: "copilot_command_unresolvable",

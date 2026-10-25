@@ -1,68 +1,82 @@
-# @superbiche/copilot-paperclip-adapter
+# @zwicker-software/copilot-paperclip-adapter
 
-External [Paperclip](https://github.com/paperclipai/paperclip) adapter that spawns the [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) as a managed employee. Wraps `copilot` as a subprocess, passes the wake prompt via `-p`, parses `--output-format json` JSONL stdout, and persists Copilot's native `sessionId` so Paperclip can resume across heartbeats via `copilot --resume=<sessionId>`.
+Paperclip external adapter (`copilot_local`) that runs the [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli).
+Zwicker Software fork of `@superbiche/copilot-paperclip-adapter` 0.2.1 (MIT, see [NOTICE.md](./NOTICE.md)) with the full
+Paperclip run contract that the upstream bridge lacked.
 
-## Origin and attribution
+## What the fork adds over 0.2.1
 
-The runtime of this adapter combines work from two upstream PRs against [`paperclipai/paperclip`](https://github.com/paperclipai/paperclip):
+| # | Capability | How |
+|---|---|---|
+| 1 | Wake prompt + full `PAPERCLIP_*` env | `selectPaperclipPromptSections` (wake payload, task context, handoff, resume delta) and `PAPERCLIP_TASK_ID`, `_WAKE_REASON`, `_WAKE_COMMENT_ID`, `_APPROVAL_*`, `_LINKED_ISSUE_IDS`, workspace vars. Same sections as `gemini_local`. |
+| 2 | Run API key | `PAPERCLIP_API_KEY = ctx.authToken`, written last. `config.env` can never set or override any `PAPERCLIP_*` key (dropped keys are logged). |
+| 3 | Managed instructions | `instructionsFilePath` is read each run and prepended to the prompt with the relative-path directive. |
+| 4 | Connections tools / managed MCP | `ctx.runtimeMcp` servers (and `paperclipManagedMcp` gateways when the host supplies them) go to `--additional-mcp-config @<file>`. The file is `0600` in a per-run temp dir, so bearer tokens never appear on the command line. `runtimeToolDelivery: "native_mcp"`. |
+| 5 | Cooperative cancel | Registers with `onCancellationReady`; on `ctx.signal` abort it SIGTERMs the CLI process group (SIGKILL after `graceSec`) and returns `executionCancellation.state = "acknowledged"`. |
+| 6 | Usage | `--usage-output-file` is parsed: input/output/cached tokens summed over `modelMetrics`, `costUsd` from `totalNanoAiu` (1 AI credit = $0.01), premium requests and credits in `resultJson.copilotUsage`. Falls back to JSONL output tokens if the file is missing. |
+| - | CLI pinning | Always `COPILOT_AUTO_UPDATE=false` + `--no-auto-update`; `testEnvironment` warns if the installed CLI differs from the verified version (`PINNED_COPILOT_CLI_VERSION` = 1.0.103). |
+| - | Skills | Host skill-snapshot API; per-run `COPILOT_SKILLS_DIRS`. |
 
-- **Foundation** — `src/server/execute.ts`, `src/server/parse.ts`, `src/server/test.ts`, `src/ui-parser.ts`, the JSONL parsing, transcript translation, stale-session retry logic, and the initial 54-test suite were **originally authored by [@tjp2021](https://github.com/tjp2021)** in PR [paperclipai/paperclip#2085](https://github.com/paperclipai/paperclip/pull/2085) as an in-tree `packages/adapters/copilot-local` package. Greptile gave the PR a 5/5 confidence score.
+Kept from upstream: GitHub token resolution (`githubToken`, env, `gh auth token`), provider BYOK (`copilotProvider`), GHE support, dynamic model discovery, session resume (`--resume=<id>` with stale-session retry), JSONL log parsing, UI parser.
 
-- **Auth + features** — `src/server/auth.ts` (token resolution + endpoint discovery + token-fingerprint cache), `src/server/models.ts` (dynamic model discovery), `src/server/detect-model.ts`, `src/server/skills.ts` (skill injection via `COPILOT_SKILLS_DIRS`), the `fetchWithRetry` helper, and the BYOK / GHE / multi-tenant identity handling were **authored by [@HearthCore](https://github.com/HearthCore)** in PR [paperclipai/paperclip#3629](https://github.com/paperclipai/paperclip/pull/3629). The Greptile-flagged SSRF P1 was already addressed at HEAD by HearthCore; this port adds defense-in-depth `gheHost` format validation on top.
+Not supported: remote/sandbox execution targets (returns `adapter_engine_unavailable`).
 
-After PR [paperclipai/paperclip#2218](https://github.com/paperclipai/paperclip/pull/2218) shipped the external adapter plugin system, the ecosystem direction shifted toward third-party adapter packages over in-tree additions. With both PRs sitting unmerged in the upstream queue, the adapter was assembled out-of-tree into this external package — preserving both authors' work, with the SSRF defense-in-depth fix applied during port and provider-BYOK (`adapterConfig.copilotProvider`) added as a new first-class config surface for the use case Copilot CLI's `copilot help providers` actually documents.
+## Pinned versions
 
-The external-plugin port — `src/server/index.ts` factory exposing `createServerAdapter()`, `sessionManagement` declaration, inlined self-contained `src/ui-parser.ts`, `src/server/provider.ts` provider-BYOK validation/injection, stand-alone `tsconfig.json`, and the workspace packaging — was done by [@superbiche](https://github.com/superbiche) / [@tsbwc](https://github.com/tsbwc). Smoke-tested end-to-end against a paperclip-dev instance with both GitHub-mode and provider-mode (homelab llama.cpp via `coder-qwen3.6-q6_k_xl`).
+- Copilot CLI **1.0.103** (`npm i -g @github/copilot@1.0.103`). Verified: `-p`, `--output-format json`, `--additional-mcp-config`, `--usage-output-file`, `--reasoning-effort` (alias `--effort`), `--no-auto-update`, `--no-ask-user`, `--resume`, `COPILOT_SKILLS_DIRS`, `COPILOT_AUTO_UPDATE`.
+- `@paperclipai/adapter-utils` **2026.1005.0** (exact pin, matches host Paperclip 2026.1005.0).
 
-## Status
+## Install (normal plugin)
 
-- v0.1.0 — initial release.
-- 128 unit tests cover JSONL parse, transcript parse, error detection, stale-session retry, token resolution, endpoint discovery, model discovery, hostname validation, and session-codec round-trip.
-- `supportsSessionResume: true`, `nativeContextManagement: "confirmed"`. Resume verified end-to-end against a paperclip-dev instance + real Copilot CLI 1.0.37.
-- Subscription billing (`costUsd: null`); premium-request count tracked separately on `usage`.
-
-## Features
-
-- **Session resume** via Copilot's native `--resume=<sessionId>`. Stale-session detection retries cleanly with a fresh session.
-- **GitHub-side BYOK** via `adapterConfig.githubToken` (paperclip secret), with classic-PAT (`ghp_`) rejection.
-- **Provider BYOK** via `adapterConfig.copilotProvider` — point Copilot CLI at any OpenAI-compatible / Anthropic / Azure endpoint. **No GitHub Copilot subscription required in this mode.** Use cases: Ollama, llama.cpp, vLLM, Foundry Local, direct Anthropic Console, OpenAI direct.
-- **GitHub auth resolution chain** when no `githubToken` and no provider are set: `COPILOT_GITHUB_TOKEN` → `GH_TOKEN` → `GITHUB_TOKEN` → `gh auth token` CLI fallback. Tunable via `adapterConfig.tokenSource` (`auto` / `env` / `gh_cli`).
-- **GitHub Enterprise** support via `adapterConfig.gheHost`. Strict hostname validation rejects malformed values before any side-effect (URLs, schemes, ports, paths, userinfo). When `gheHost` is set, env-token fallback is suppressed (SSRF guard) and `gh auth token --hostname <host>` is used.
-- **Dynamic model discovery** via Copilot's `/models` API (with token-fingerprint cache for endpoint discovery). Falls back to a hardcoded `FALLBACK_MODELS` list when offline / no token.
-- **Skill injection** via `COPILOT_SKILLS_DIRS`. Paperclip-managed skills are symlinked into a per-cwd cache and exposed to the Copilot CLI ephemerally.
-
-## Prerequisites
-
-1. **Install Copilot CLI** on the host running Paperclip:
-   ```bash
-   npm i -g @githubnext/github-copilot-cli
-   copilot --version    # verify >= 1.0.12 (tested against 1.0.37)
-   ```
-2. **Authenticate.** Pick one:
-   - **Interactive (preferred for local dev):** `copilot login` (device flow)
-   - **Token (preferred for K8s/CI):** set `adapterConfig.copilotToken` (BYOK) or export `GH_TOKEN` / `COPILOT_GITHUB_TOKEN` on the Paperclip host
-   - **gh CLI:** `gh auth login` once, then leave `tokenSource: "auto"` — the adapter falls back to `gh auth token`
-3. **Subscription.** Any tier with Copilot CLI access (Individual / Business / Enterprise / trial / free).
-
-## Install
+This package lives in the pnpm workspace `zwick/paperclip-adapters` at `packages/copilot-local`. Nothing is published to npm. Build a self-contained package directory that lives **outside** the managed plugins dir (so other plugin installs/reinstalls never touch it), then register it as a local-path adapter:
 
 ```bash
+git clone https://github.com/zwick/paperclip-adapters && cd paperclip-adapters
+pnpm install && pnpm build && pnpm test
+cd packages/copilot-local
+pnpm pack                                  # zwicker-software-copilot-paperclip-adapter-0.3.0.tgz
+mkdir -p /opt/paperclip-plugins/copilot && tar -xzf *.tgz -C /opt/paperclip-plugins/copilot --strip-components=1
+(cd /opt/paperclip-plugins/copilot && npm install --omit=dev --ignore-scripts)
+
 curl -X POST http://127.0.0.1:3100/api/adapters/install \
   -H 'content-type: application/json' \
-  -d '{"packageName":"@superbiche/copilot-paperclip-adapter"}'
+  -d '{"packageName":"/opt/paperclip-plugins/copilot","isLocalPath":true}'
 ```
 
-Restart Paperclip once after install if you're on a release pre-`v2026.423.0-canary.2` (the hot-install path landed in `paperclipai/paperclip#4324`).
+(`/opt/paperclip-plugins/copilot` is an example; any stable directory works.) A tarball path cannot be passed as `packageName` without `isLocalPath`: the host would treat the path as the npm package name. The host never "reinstalls" local-path adapters, it only reloads them.
 
-## Local development
+The adapter type stays `copilot_local`, so it replaces the registered `@superbiche/copilot-paperclip-adapter` entry in `~/.paperclip/adapter-plugins.json`. **Existing agents are untouched by installing; switching them over is a separate, approved cutover.** Test first on an isolated Paperclip home: see [docs/ISOLATED-INSTALL.md](docs/ISOLATED-INSTALL.md).
 
-```bash
-git clone https://github.com/superbiche/paperclip-adapters
-cd paperclip-adapters
-pnpm install
-pnpm -C packages/copilot-local build
-pnpm -C packages/copilot-local test
-```
+## Rollback to 0.2.1
+
+0.2.1 is the unmodified upstream `@superbiche/copilot-paperclip-adapter@0.2.1`. It stays in the git history of this repo: `packages/copilot-local` at commit `cc16459` (the fork's `main` before 0.3.0 landed) is byte-identical to upstream 0.2.1.
+
+1. Stop Paperclip.
+2. Build 0.2.1 from the fork, or install it from npm:
+   ```bash
+   git clone https://github.com/zwick/paperclip-adapters && cd paperclip-adapters
+   git checkout cc16459
+   pnpm install && pnpm --filter @superbiche/copilot-paperclip-adapter build
+   # then pack and register this directory as in "Install (normal plugin)", or:
+   # POST /api/adapters/install {"packageName":"@superbiche/copilot-paperclip-adapter@0.2.1"}
+   ```
+   Alternatively restore the saved plugin snapshot and registry from the Phase 0 backup (`copilot-adapter-backup-0.2.1/` in the Leo McGarry workspace: `full-plugin-snapshot-0.2.1-patched/`, `adapter-plugins.json`, `SHA256SUMS`, README with exact commands). That snapshot includes `execute.js.local-patch.diff`.
+3. Start Paperclip and run an agent environment test.
+
+Both packages register the adapter type `copilot_local`, so installing one replaces the other. Agent configuration does not need to change in either direction.
+
+## Upkeep
+
+- **Copilot CLI upgrades are manual.** Install the new version, run `node scripts/smoke-live.mjs` (about 1 premium request) and `npm test`, then bump `PINNED_COPILOT_CLI_VERSION` in `src/index.ts`. Watch for changes to `--additional-mcp-config`, `--usage-output-file` schema, JSONL event names, `COPILOT_SKILLS_DIRS` (undocumented).
+- **Paperclip upgrades:** bump the `@paperclipai/adapter-utils` pin to the new host version, `npm run typecheck`, compare `adapter-gemini-local/dist/server/execute.js` against `src/server/execute.ts` for new context fields (the template we follow).
+- Upstream `@superbiche` releases: review the diff against commit `4fc467f`, cherry-pick auth/model/provider fixes.
+
+## Known limits
+
+- The prompt is passed as a single `-p` argument. Very large prompts (hundreds of KB) can hit OS argv limits; stdin prompting is unverified.
+- Copilot masks `Authorization: Bearer $PAPERCLIP_API_KEY` as `******` in its echoed user message (observed in 1.0.103 output); the model still ran authenticated commands correctly. `--secret-env-vars` is intentionally **not** used because it would strip `PAPERCLIP_API_KEY` from the agent's shell.
+- `costUsd` is derived from AI credits and informational for subscription auth.
+- Cancel is verified against a stub CLI and the host contract, not against a live Copilot run.
 
 ## Agent config
 
@@ -167,14 +181,10 @@ The token is fetched via `gh auth token --hostname corp.ghe.com`, the `/models` 
 
 ### Skills
 
-Skills declared by Paperclip's runtime (`paperclipRuntimeSkills` in `adapterConfig`) are symlinked into a per-cwd cache (`<cwd>/.paperclip/copilot-skill-cache/`) on every run, and the cache directory is exposed to Copilot CLI via `COPILOT_SKILLS_DIRS`. Stale entries are pruned automatically.
+Skills declared by Paperclip's runtime (`paperclipRuntimeSkills`) are symlinked into a **per-run temp directory** that is passed to Copilot CLI via `COPILOT_SKILLS_DIRS` and deleted afterwards. Nothing is written into the workspace or `~/.copilot`. The operational `paperclip` skill is always mounted.
 
 Full config surface is documented in the adapter's `agentConfigurationDoc` — exposed via `GET /api/adapters/copilot_local` on a Paperclip instance that has the adapter installed.
 
-## What's deferred
-
-- **Device-flow login as an in-paperclip flow.** Copilot's interactive `copilot login` works on the Paperclip host but is not yet exposed via Paperclip's UI / API. Adding this requires an upstream extension point for adapter-owned HTTP routes (the relevant SSE endpoint in `paperclipai/paperclip#3629`'s `login.ts` is paperclip-side and can't ship in an external adapter today). Tracked in `docs/authoring-gaps.md`.
-
 ## License
 
-MIT. See [`LICENSE`](./LICENSE).
+MIT. See [`LICENSE`](./LICENSE) and [`NOTICE.md`](./NOTICE.md).
